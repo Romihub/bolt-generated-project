@@ -1,0 +1,42 @@
+global:
+  environment: prod
+  domain: ecommerce.com
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 400m
+    memory: 512Mi
+
+autoscaling:
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+monitoring:
+  enabled: true
+  retention: 30d
+
+services:
+  frontend:
+    replicas: 3
+    image:
+      tag: stable
+  auth:
+    replicas: 3
+    image:
+      tag: stable
+  catalog:
+    replicas: 3
+    image:
+      tag: stable
+  orders:
+    replicas: 3
+    image:
+      tag: stable
+  payment:
+    replicas: 3
+    image:
+      tag: stable

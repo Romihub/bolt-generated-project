@@ -1,0 +1,39 @@
+loki:
+  auth_enabled: true
+  commonConfig:
+    replication_factor: 3
+  storage:
+    type: s3
+    s3:
+      region: us-east-1
+      bucketnames: loki-storage-${ENV}
+      s3forcepathstyle: true
+
+  compactor:
+    retention_enabled: true
+    retention_delete_delay: 2h
+    retention_delete_worker_count: 150
+
+  limits_config:
+    retention_period: 30d
+    ingestion_rate_mb: 10
+    ingestion_burst_size_mb: 20
+
+  ruler:
+    enabled: true
+    storage:
+      type: s3
+      s3:
+        bucketnames: loki-ruler-${ENV}
+
+promtail:
+  enabled: true
+  config:
+    snippets:
+      extraScrapeConfigs: |
+        - job_name: kubernetes-pods
+          kubernetes_sd_configs:
+            - role: pod
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_pod_label_app]
+              target_label: app

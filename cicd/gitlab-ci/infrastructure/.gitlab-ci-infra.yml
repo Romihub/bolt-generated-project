@@ -1,0 +1,32 @@
+.terraform_base:
+  image: hashicorp/terraform:${TERRAFORM_VERSION}
+  before_script:
+    - cd infrastructure/${CLOUD_PROVIDER}/environments/${ENV}
+
+terraform-plan:
+  extends: .terraform_base
+  stage: test
+  script:
+    - terraform init
+    - terraform plan -out=tfplan
+  artifacts:
+    paths:
+      - infrastructure/${CLOUD_PROVIDER}/environments/${ENV}/tfplan
+  parallel:
+    matrix:
+      - CLOUD_PROVIDER: [aks, eks]
+        ENV: [dev, test, prod]
+
+terraform-apply:
+  extends: .terraform_base
+  stage: deploy-${ENV}
+  script:
+    - terraform init
+    - terraform apply -auto-approve tfplan
+  dependencies:
+    - terraform-plan
+  when: manual
+  parallel:
+    matrix:
+      - CLOUD_PROVIDER: [aks, eks]
+        ENV: [dev, test, prod]

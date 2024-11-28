@@ -1,0 +1,82 @@
+def environments = ['dev', 'test', 'prod']
+
+pipeline {
+    agent any
+    
+    parameters {
+        choice(name: 'ENVIRONMENT', choices: environments, description: 'Select environment to deploy')
+        choice(name: 'CLOUD_PROVIDER', choices: ['aks', 'eks'], description: 'Select cloud provider')
+        choice(name: 'ACTION', choices: ['plan', 'apply', 'destroy'], description: 'Select Terraform action')
+    }
+    
+    environment {
+        TERRAFORM_VERSION = '1.0.0'
+        AWS_CREDENTIALS = credentials('aws-credentials')
+        AZURE_CREDENTIALS = credentials('azure-credentials')
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Terraform Init') {
+            steps {
+                script {
+                    dir("infrastructure/${params.CLOUD_PROVIDER}/environments/${params.ENVIRONMENT}") {
+                        sh "terraform init"
+                    }
+                }
+            }
+        }
+        
+        stage('Terraform Plan') {
+            when {
+                expression { params.ACTION == 'plan' || params.ACTION == 'apply' }
+            }
+            steps {
+                script {
+                    dir("infrastructure/${params.CLOUD_PROVIDER}/environments/${params.ENVIRONMENT}") {
+                        sh "terraform plan -out=tfplan"
+                    }
+                }
+            }
+        }
+        
+        stage('Terraform Apply') {
+            when {
+                expression { params.ACTION == 'apply' }
+            }
+            steps {
+                script {
+                    dir("infrastructure/${params.CLOUD_PROVIDER}/environments/${params.ENVIRONMENT}") {
+                        input message: "Apply terraform plan for ${params.ENVIRONMENT}?"
+                        sh "terraform apply tfplan"
+                    }
+                }
+            }
+        }
+        
+        stage('Terraform Destroy') {
+            when {
+                expression { params.ACTION == 'destroy' }
+            }
+            steps {
+                script {
+                    dir("infrastructure/${params.CLOUD_PROVIDER}/environments/${params.ENVIRONMENT}") {
+                        input message: "Destroy infrastructure in ${params.ENVIRONMENT}?"
+                        sh "terraform destroy -auto-approve"
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}

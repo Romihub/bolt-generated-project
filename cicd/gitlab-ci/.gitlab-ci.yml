@@ -1,0 +1,27 @@
+variables:
+  DOCKER_REGISTRY: ${CI_REGISTRY}
+  TERRAFORM_VERSION: "1.0.0"
+
+include:
+  - local: 'cicd/gitlab-ci/infrastructure/.gitlab-ci-infra.yml'
+  - local: 'cicd/gitlab-ci/application/.gitlab-ci-app.yml'
+
+stages:
+  - test
+  - build
+  - deploy-dev
+  - deploy-test
+  - deploy-prod
+
+.base_rules: &base_rules
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+.deploy_rules: &deploy_rules
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+      when: on_success
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual

@@ -1,0 +1,91 @@
+def environments = ['dev', 'test', 'prod']
+def services = ['frontend', 'auth', 'catalog', 'orders', 'payment']
+
+pipeline {
+    agent any
+    
+    parameters {
+        choice(name: 'ENVIRONMENT', choices: environments, description: 'Select environment')
+        choice(name: 'SERVICE', choices: services, description: 'Select service to build/deploy')
+    }
+    
+    environment {
+        DOCKER_REGISTRY = credentials('docker-registry')
+        KUBE_CONFIG = credentials('kube-config')
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Unit Tests') {
+            steps {
+                dir("services/${params.SERVICE}") {
+                    sh "npm install"
+                    sh "npm test"
+                }
+            }
+        }
+        
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    dir("services/${params.SERVICE}") {
+                        def imageTag = "${params.ENVIRONMENT}-${BUILD_NUMBER}"
+                        sh """
+                            docker build -t ${DOCKER_REGISTRY}/${params.SERVICE}:${imageTag} .
+                            docker push ${DOCKER_REGISTRY}/${params.SERVICE}:${imageTag}
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy to Kubernetes') {
+            steps {
+                script {
+                    def imageTag = "${params.ENVIRONMENT}-${BUILD_NUMBER}"
+                    sh """
+                        kubectl config use-context ${params.ENVIRONMENT}
+                        helm upgrade --install ${params.SERVICE} \
+                            ./k8s/charts/${params.SERVICE} \
+                            -f ./k8s/environments/${params.ENVIRONMENT}/values.yaml \
+                            --set image.tag=${imageTag} \
+                            -n ecommerce-${params.ENVIRONMENT}
+                    """
+                }
+            }
+        }
+        
+        stage('Integration Tests') {
+            when {
+                expression { params.ENVIRONMENT != 'prod' }
+            }
+            steps {
+                sh "npm run integration-tests"
+            }
+        }
+        
+        stage('Performance Tests') {
+            when {
+                expression { params.ENVIRONMENT == 'test' }
+            }
+            steps {
+                sh "k6 run performance-tests/${params.SERVICE}.js"
+            }
+        }
+    }
+    
+    post {
+        failure {
+            script {
+                if (params.ENVIRONMENT != 'prod') {
+                    sh "helm rollback ${params.SERVICE} -n ecommerce-${params.ENVIRONMENT}"
+                }
+            }
+        }
+    }
+}

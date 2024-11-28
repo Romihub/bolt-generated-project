@@ -1,0 +1,62 @@
+.service_base:
+  image: node:16
+  before_script:
+    - cd services/${SERVICE}
+
+test:
+  extends: .service_base
+  stage: test
+  script:
+    - npm install
+    - npm test
+  parallel:
+    matrix:
+      - SERVICE: [frontend, auth, catalog, orders, payment]
+
+build:
+  extends: .service_base
+  stage: build
+  script:
+    - docker build -t ${DOCKER_REGISTRY}/${SERVICE}:${CI_COMMIT_SHA} .
+    - docker push ${DOCKER_REGISTRY}/${SERVICE}:${CI_COMMIT_SHA}
+  parallel:
+    matrix:
+      - SERVICE: [frontend, auth, catalog, orders, payment]
+
+.deploy_base:
+  image: alpine/helm:3.8.0
+  script:
+    - helm upgrade --install ${SERVICE} 
+      ./k8s/charts/${SERVICE} 
+      -f ./k8s/environments/${ENV}/values.yaml 
+      --set image.tag=${CI_COMMIT_SHA} 
+      -n ecommerce-${ENV}
+
+deploy-dev:
+  extends: .deploy_base
+  stage: deploy-dev
+  variables:
+    ENV: dev
+  parallel:
+    matrix:
+      - SERVICE: [frontend, auth, catalog, orders, payment]
+
+deploy-test:
+  extends: .deploy_base
+  stage: deploy-test
+  variables:
+    ENV: test
+  when: manual
+  parallel:
+    matrix:
+      - SERVICE: [frontend, auth, catalog, orders, payment]
+
+deploy-prod:
+  extends: .deploy_base
+  stage: deploy-prod
+  variables:
+    ENV: prod
+  when: manual
+  parallel:
+    matrix:
+      - SERVICE: [frontend, auth, catalog, orders, payment]

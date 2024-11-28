@@ -1,0 +1,48 @@
+provisionDataStore:
+  cassandra: false
+  elasticsearch: true
+  kafka: true
+
+storage:
+  type: elasticsearch
+  elasticsearch:
+    host: elasticsearch-master
+    port: 9200
+    scheme: http
+    usePassword: true
+    user: elastic
+    indexPrefix: jaeger
+    
+  kafka:
+    brokers: kafka-headless:9092
+    topic: jaeger-spans
+    
+collector:
+  service:
+    type: ClusterIP
+  replicaCount: 2
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    
+agent:
+  enabled: true
+  daemonset:
+    useHostPort: false
+  
+query:
+  service:
+    type: ClusterIP
+  ingress:
+    enabled: true
+    hosts:
+      - jaeger.${DOMAIN}
+    annotations:
+      kubernetes.io/ingress.class: nginx
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    tls:
+      - secretName: jaeger-tls
+        hosts:
+          - jaeger.${DOMAIN}

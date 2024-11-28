@@ -1,0 +1,100 @@
+name: Services CI/CD
+
+on:
+  push:
+    paths:
+      - 'services/**'
+    branches: [ main, develop ]
+  pull_request:
+    paths:
+      - 'services/**'
+    branches: [ main, develop ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        service: [frontend, auth, catalog, orders, payment]
+        
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '16'
+        
+    - name: Install Dependencies
+      run: |
+        cd services/${{ matrix.service }}
+        npm install
+        
+    - name: Run Tests
+      run: |
+        cd services/${{ matrix.service }}
+        npm test
+        
+    - name: Build Docker Image
+      run: |
+        cd services/${{ matrix.service }}
+        docker build -t ${{ secrets.DOCKER_REGISTRY }}/${{ matrix.service }}:${{ github.sha }} .
+        
+    - name: Push Docker Image
+      if: github.event_name == 'push'
+      run: |
+        echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+        docker push ${{ secrets.DOCKER_REGISTRY }}/${{ matrix.service }}:${{ github.sha }}
+        
+  deploy-dev:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment: dev
+    
+    strategy:
+      matrix:
+        service: [frontend, auth, catalog, orders, payment]
+    
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Set Kubernetes Context
+      uses: azure/k8s-set-context@v1
+      with:
+        kubeconfig: ${{ secrets.KUBE_CONFIG_DEV }}
+        
+    - name: Deploy to Dev
+      run: |
+        helm upgrade --install ${{ matrix.service }} \
+          ./k8s/charts/${{ matrix.service }} \
+          -f ./k8s/environments/dev/values.yaml \
+          --set image.tag=${{ github.sha }} \
+          -n ecommerce-dev
+          
+  deploy-prod:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: prod
+    
+    strategy:
+      matrix:
+        service: [frontend, auth, catalog, orders, payment]
+    
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Set Kubernetes Context
+      uses: azure/k8s-set-context@v1
+      with:
+        kubeconfig: ${{ secrets.KUBE_CONFIG_PROD }}
+        
+    - name: Deploy to Production
+      run: |
+        helm upgrade --install ${{ matrix.service }} \
+          ./k8s/charts/${{ matrix.service }} \
+          -f ./k8s/environments/prod/values.yaml \
+          --set image.tag=${{ github.sha }} \
+          -n ecommerce-prod

@@ -1,0 +1,60 @@
+name: Infrastructure CI/CD
+
+on:
+  push:
+    paths:
+      - 'infrastructure/**'
+    branches: [ main, develop ]
+  pull_request:
+    paths:
+      - 'infrastructure/**'
+    branches: [ main, develop ]
+
+jobs:
+  terraform:
+    name: 'Terraform'
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        environment: [dev, test, prod]
+        provider: [aks, eks]
+        
+    environment:
+      name: ${{ matrix.environment }}
+    
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v1
+      
+    - name: Configure AWS Credentials
+      if: matrix.provider == 'eks'
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+        
+    - name: Azure Login
+      if: matrix.provider == 'aks'
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: Terraform Init
+      run: |
+        cd infrastructure/${{ matrix.provider }}/environments/${{ matrix.environment }}
+        terraform init
+        
+    - name: Terraform Plan
+      run: |
+        cd infrastructure/${{ matrix.provider }}/environments/${{ matrix.environment }}
+        terraform plan -out=tfplan
+        
+    - name: Terraform Apply
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      run: |
+        cd infrastructure/${{ matrix.provider }}/environments/${{ matrix.environment }}
+        terraform apply -auto-approve tfplan

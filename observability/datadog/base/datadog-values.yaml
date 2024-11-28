@@ -1,0 +1,37 @@
+datadog:
+  apiKey: ${DATADOG_API_KEY}
+  appKey: ${DATADOG_APP_KEY}
+  
+  clusterName: ${CLUSTER_NAME}
+  
+  logs:
+    enabled: true
+    containerCollectAll: true
+  
+  apm:
+    enabled: true
+    portEnabled: true
+    
+  processAgent:
+    enabled: true
+    processCollection: true
+    
+  networkMonitoring:
+    enabled: true
+    
+  securityAgent:
+    compliance:
+      enabled: true
+    runtime:
+      enabled: true
+      
+  systemProbe:
+    enabled: true
+    enableTCPQueueLength: true
+    enableOOMKill: true
+    
+  orchestratorExplorer:
+    enabled: true
+    
+  kubeStateMetricsCore:
+    enabled: true
